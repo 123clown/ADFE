@@ -412,7 +412,7 @@ class ADFF_main(object):
         if n_gpu > 0:
             torch.cuda.manual_seed_all(self.seed)
         cudnn.deterministic = True
-        cudnn.benchmark = True
+        cudnn.benchmark = False
        
         
        
