@@ -16,7 +16,7 @@ net_dump_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resul
 pre_dump_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'swin_base_patch4_window12_384.pth')
 
 def parse_args():
-    desc = 'rgbd-transformer-nutrition estimation on nutrition5k'
+    desc = 'nutrition estimation on nutrition5k'
     parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
@@ -60,12 +60,7 @@ def main():
 
     Net = ADFF_main(args)
 
-    if args.test :
-        Net.test()
-        print("Test Finished!")
-    else:
-        Net.train()
-        print('Training finished!')
+    Net.main()
 
 if __name__ == '__main__':
     main()
