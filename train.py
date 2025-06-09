@@ -409,10 +409,11 @@ class ADFF_main(object):
         random.seed(self.seed)
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
-        if n_gpu > 0:
-            torch.cuda.manual_seed_all(self.seed)
+        torch.cuda.manual_seed_all(self.seed)
         cudnn.deterministic = True
         cudnn.benchmark = False
+        os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
+        torch.use_deterministic_algorithms(True)
        
         
        
