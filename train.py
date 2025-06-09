@@ -34,19 +34,19 @@ class ADFF_main(object):
         self.min_avg = 0.21
         
         
-        if not args.test:
-            self.set_seed()
-            self.train_data_loader, self.test_data_loader = get_DataLoader(args)
-            self.loss_path = os.path.join(self.loss_path, time.strftime('%y%m%d-%H%M%S', time.localtime()))
-            self.dump_path = os.path.join(self.dump_path, time.strftime('%y%m%d-%H%M%S', time.localtime()))
-            self.loss_path = Path(self.loss_path)
-            self.dump_path = Path(self.dump_path)
-            if not self.loss_path.exists():
-                self.loss_path.mkdir()
-            if not self.dump_path.exists():
-                self.dump_path.mkdir()
-        else:
-            _, self.test_data_loader = get_DataLoader(args)
+        
+        self.set_seed()
+        self.train_data_loader, self.test_data_loader = get_DataLoader(args)
+            if not args.test:
+                self.loss_path = os.path.join(self.loss_path, time.strftime('%y%m%d-%H%M%S', time.localtime()))
+                self.dump_path = os.path.join(self.dump_path, time.strftime('%y%m%d-%H%M%S', time.localtime()))
+                self.loss_path = Path(self.loss_path)
+                self.dump_path = Path(self.dump_path)
+                if not self.loss_path.exists():
+                    self.loss_path.mkdir()
+                if not self.dump_path.exists():
+                    self.dump_path.mkdir()
+        
         
         if args.size == 224:
             self.swin1 = load_swin_base_patch4_window7_224(args.pre)
@@ -70,14 +70,7 @@ class ADFF_main(object):
                 param.requires_grad = False
 
                     
-                    
-        # ##           
-        self.swin1 = nn.DataParallel(self.swin1)
-        self.swin2  = nn.DataParallel(self.swin2)
-        self.ADFF = nn.DataParallel(self.ADFF)
-        
-        
-                
+                     
         
         self.optimizer = optim.Adam([
                     {'params': self.swin1.parameters(), 'lr': args.lr, 'betas': (args.beta1, args.beta2), 'weight_decay': args.weight_decay},
@@ -104,42 +97,18 @@ class ADFF_main(object):
             self.ADFF.to(self.device)
             self.L1Loss.to(self.device)
             self.mseloss.to(self.device)
-            
+        # self.train_hist = {}
+        # self.train_hist['train_loss'] = []
+        # self.train_hist['per_epoch_time'] = []
+        # self.train_hist['total_time'] = []
     
+       
     
-    def train(self):
-        self.train_hist = {}
-        self.train_hist['train_loss'] = []
-        self.train_hist['per_epoch_time'] = []
-        self.train_hist['total_time'] = []
-        
-        if self.load_dump:
-            self.load(self.load_path)
-            print('continue training!!!!')
-        else:
-            self.end_epoch = self.epoch
-            
-        
-        print('Training start!!!!')
-        start_time = time.time()
-
-        
-        for epoch in range(self.start_epoch, self.end_epoch + 1 ):
-            
-            
-            self.swin1.train()
-            self.swin2.train()
-            self.ADFF.train()
-            
-            
-            print('Epoch: {}'.format(epoch))
-
-            epoch_start_time = time.time()
-            
-            loss_avg = 0.0
-            
-            
-            max_iter = self.train_data_loader.dataset.__len__() // self.batch_size
+    def train(self, epoch):
+        self.swin1.train()
+        self.swin2.train()
+        self.ADFF.train()
+        max_iter = self.train_data_loader.dataset.__len__() // self.batch_size
             for iter, x in enumerate(tqdm(self.train_data_loader, ncols=80)):
                 if self.gpu_mode:
                     inputs = x[0].to(self.device)
@@ -183,109 +152,19 @@ class ADFF_main(object):
                 
                 loss.backward()
                 self.optimizer.step()
-                
-                
-            
-            print('Epoch: [{:2d}] [{:4d}]/[{:4d}]  loss: {:.8f} '.format(
+        self.StepLR.step()  
+        print('Epoch: [{:2d}] [{:4d}]/[{:4d}]  loss: {:.8f} '.format(
                     epoch, (iter + 1), max_iter, loss_avg / max_iter
                 ))
-            
-            self.StepLR.step()
-            
-            
-            self.tt(epoch)
-           
-          
-            
-        print('Training finish!... save training results')
-        self.save(epoch)
-        
-        self.train_hist['total_time'].append(time.time() - start_time)
-        print('AVG one epoch time: {:.2f}, total {} epochs time: {:.2f}'.format(
-            np.mean(self.train_hist['per_epoch_time']), self.epoch, self.train_hist['total_time'][0]
-        ))
-    
-    def tt(self, epoch):
-        
-        self.swin1.eval()
-        self.swin2.eval()
-        self.ADFF.eval()
-            
-        calories_loss = 0
-        mass_loss = 0
-        fat_loss = 0
-        carb_loss = 0
-        protein_loss = 0
-        calories_real = 0
-        mass_real = 0
-        fat_real = 0
-        carb_real =0
-        protein_real = 0
-        nums = 0
-        
-        with torch.no_grad():
-            for batch_id, x in enumerate(tqdm(self.test_data_loader, ncols=80)):
-                if self.gpu_mode:
-                    inputs = x[0].to(self.device)
-                    total_calories = x[2].to(self.device).float()
-                    total_mass = x[3].to(self.device).float()
-                    total_fat = x[4].to(self.device).float()
-                    total_carb = x[5].to(self.device).float()
-                    total_protein = x[6].to(self.device).float()
-                    
-                    inputs_rgbd = x[7].to(self.device)
-                    
-                    x_rgb = self.swin1(inputs)
-                    x_rgbd = self.swin2(inputs_rgbd)
-                    out = self.ADFF(x_rgb, x_rgbd)
-               
-                
-                calories_mae = self.L1Loss(out[0], total_calories)
-                mass_mae = self.L1Loss(out[1], total_mass)
-                fat_mae = self.L1Loss(out[2], total_fat)
-                carb_mae = self.L1Loss(out[3], total_carb)
-                protein_mae = self.L1Loss(out[4], total_protein)
-                # 求总的绝对误差
-                calories_loss += calories_mae.item() 
-                mass_loss += mass_mae.item() 
-                fat_loss += fat_mae.item() 
-                carb_loss += carb_mae.item() 
-                protein_loss += protein_mae.item() 
-                # 求各类总的真实值
-                calories_real += total_calories.sum().item()
-                mass_real += total_mass.sum().item()
-                fat_real += total_fat.sum().item()
-                carb_real += total_carb.sum().item()
-                protein_real += total_protein.sum().item()
-        
-        calories_pmae = calories_loss / calories_real
-        mass_pmae = mass_loss / mass_real
-        fat_pmae = fat_loss / fat_real
-        carb_pmae = carb_loss / carb_real
-        protein_pmae = protein_loss / protein_real
-        
-        mean = (calories_pmae + mass_pmae + fat_pmae + carb_pmae + protein_pmae) / 5
-        print('mean:', mean)
-        
-        if mean < self.min_avg:
-            self.save(epoch)
-            self.min_avg = mean
-    
         
         
     
     def test(self):
-        self.load_test(self.args.load)
+        
         
         self.swin1.eval()
         self.swin2.eval()
         self.ADFF.eval()
-            
-        load_path = self.load_path
-        test_r = os.path.join(self.test_path, load_path.stem)
-        test_r_p = Path(test_r)
-        if not test_r_p.exists():
-            test_r_p.mkdir()
             
         calories_loss = 0
         mass_loss = 0
@@ -346,24 +225,33 @@ class ADFF_main(object):
         fat_pmae = fat_loss / fat_real
         carb_pmae = carb_loss / carb_real
         protein_pmae = protein_loss / protein_real
+        mean = (calories_pmae + mass_pmae + fat_pmae + carb_pmae + protein_pmae) / 5
+        if self.args.test:
+            print('calories_PMAE:', calories_pmae)
+            print('mass_PMAE:', mass_pmae)
+            print('fat_PMAE:', fat_pmae)
+            print('carb_PMAE:', carb_pmae)
+            print('protein_PMAE:', protein_pmae)
+            print('mean:', mean)
+        else:
+            print('mean:', mean)
         
-        calories_mae = calories_loss / nums
-        mass_mae = mass_loss / nums
-        fat_mae = fat_loss / nums
-        carb_mae = carb_loss / nums
-        protein_mae = protein_loss / nums
+        if not self.args.test:
+            if mean < self.min_avg:
+                self.save(epoch)
+                self.min_avg = mean
 
-        print('calories_PMAE:', calories_pmae)
-        print('mass_PMAE:', mass_pmae)
-        print('fat_PMAE:', fat_pmae)
-        print('carb_PMAE:', carb_pmae)
-        print('protein_PMAE:', protein_pmae)
-        print('nums:',nums)
-        print('calories_MAE:', calories_mae)
-        print('mass_MAE:', mass_mae)
-        print('fat_MAE:', fat_mae)
-        print('carb_MAE:', carb_mae)
-        print('protein_MAE:', protein_mae)
+    
+    def main(self):
+        if self.args.test:
+            self.load_test(self.load_path)
+            self.test(0)
+        else:  
+            print('Train start')
+            for epoch in range(self.start_epoch, self.epoch+1):
+                self.train(epoch)
+                self.test(epoch)
+            print('Train finsih')
         
         
     
@@ -375,7 +263,7 @@ class ADFF_main(object):
             'ADFF': self.ADFF.state_dict(),
             'finish_epoch': save_epoch,
             'result_path': str(save_dir)
-        }, (str(save_dir) + '/swin_{}_epoch.pkl'.format(save_epoch)))
+        }, (str(save_dir) + '/best.pkl'))
         
         
         print("========== save success ===========")
@@ -404,8 +292,6 @@ class ADFF_main(object):
         print('previous result path is {}'.format(checkpoint['result_path']))
     
     def set_seed(self):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        n_gpu = torch.cuda.device_count()
         random.seed(self.seed)
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
