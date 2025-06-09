@@ -6,6 +6,12 @@ from torch.utils.data import DataLoader
 from dataloader.dataset import Nutrition_RGBD
 import pdb
 import random
+import numpy
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    numpy.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 
 def get_DataLoader(args):
@@ -36,13 +42,15 @@ def get_DataLoader(args):
                               batch_size=args.b,
                               shuffle=True,
                               num_workers=args.num_workers,
-                              pin_memory=True
+                              pin_memory=True,
+                              worker_init_fn=seed_worker
                               )
     test_loader = DataLoader(testset,
                              batch_size=args.b,
                              shuffle=False,
                              num_workers=args.num_workers,
-                             pin_memory=True
+                             pin_memory=True,
+                             worker_init_fn=seed_worker
                              )
 
     return train_loader, test_loader
