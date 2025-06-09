@@ -57,8 +57,6 @@ def validate_args(args):
 
 def main():
     args = parse_args()
-    if not args.cpu and args.seed < 0:
-        torch.backends.cudnn.benchmark = True
 
     Net = ADFF_main(args)
 
